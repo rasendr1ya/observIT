@@ -1,0 +1,196 @@
+diff --git a/node_modules/aedes/lib/handlers/connect.js b/node_modules/aedes/lib/handlers/connect.js
+index 43011d2..8f575fd 100644
+--- a/node_modules/aedes/lib/handlers/connect.js
++++ b/node_modules/aedes/lib/handlers/connect.js
+@@ -11,7 +11,12 @@ const uniqueId = require('hyperid')()
+ function Connack (arg) {
+   this.cmd = 'connack'
+   this.returnCode = arg.returnCode
++  this.reasonCode = arg.returnCode // PATCH: MQTT 5.0 uses reasonCode
+   this.sessionPresent = arg.sessionPresent
++  // PATCH: MQTT 5.0 CONNACK properties (observIT)
++  this.properties = {
++    topicAliasMaximum: 10
++  }
+ }
+ 
+ function ClientPacketStatus (client, packet) {
+@@ -59,8 +64,8 @@ function handleConnect (client, packet, done) {
+ function init (client, packet, done) {
+   const clientId = packet.clientId
+   let returnCode = 0
+-  // [MQTT-3.1.2-2]
+-  if (packet.protocolVersion < 3 || packet.protocolVersion > 4) {
++  // [MQTT-3.1.2-2] — PATCHED for MQTT 5.0 support (observIT)
++  if (packet.protocolVersion < 3 || packet.protocolVersion > 5) {
+     returnCode = 1
+   }
+   // MQTT 3.1.0 allows <= 23 client id length
+diff --git a/node_modules/aedes/lib/handlers/publish.js b/node_modules/aedes/lib/handlers/publish.js
+index e30c9db..45accfa 100644
+--- a/node_modules/aedes/lib/handlers/publish.js
++++ b/node_modules/aedes/lib/handlers/publish.js
+@@ -5,11 +5,15 @@ const write = require('../write')
+ function PubAck (packet) {
+   this.cmd = 'puback'
+   this.messageId = packet.messageId
++  // PATCH: MQTT 5.0 default reason code (observIT)
++  this.reasonCode = 0
+ }
+ 
+ function PubRec (packet) {
+   this.cmd = 'pubrec'
+   this.messageId = packet.messageId
++  // PATCH: MQTT 5.0 default reason code (observIT)
++  this.reasonCode = 0
+ }
+ 
+ const publishActions = [
+@@ -19,15 +23,38 @@ const publishActions = [
+ function handlePublish (client, packet, done) {
+   const topic = packet.topic
+   let err
+-  if (topic.length === 0) {
++
++  // PATCH: MQTT 5.0 Topic Alias support (observIT)
++  if (topic.length === 0 && packet.properties && packet.properties.topicAlias) {
++    const alias = packet.properties.topicAlias
++    if (!client._topicAliases) {
++      client._topicAliases = {}
++    }
++    const resolvedTopic = client._topicAliases[alias]
++    if (resolvedTopic) {
++      packet.topic = resolvedTopic
++    } else {
++      err = new Error('unknown topic alias: ' + alias)
++      return done(err)
++    }
++  } else if (topic.length === 0) {
+     err = new Error('empty topic not allowed in PUBLISH')
+     return done(err)
+   }
+-  if (topic.indexOf('#') > -1) {
++
++  // PATCH: Register topic alias mapping on first use (MQTT 5.0 observIT)
++  if (packet.properties && packet.properties.topicAlias && packet.topic.length > 0) {
++    if (!client._topicAliases) {
++      client._topicAliases = {}
++    }
++    client._topicAliases[packet.properties.topicAlias] = packet.topic
++  }
++
++  if (packet.topic.indexOf('#') > -1) {
+     err = new Error('# is not allowed in PUBLISH')
+     return done(err)
+   }
+-  if (topic.indexOf('+') > -1) {
++  if (packet.topic.indexOf('+') > -1) {
+     err = new Error('+ is not allowed in PUBLISH')
+     return done(err)
+   }
+diff --git a/node_modules/aedes/lib/handlers/subscribe.js b/node_modules/aedes/lib/handlers/subscribe.js
+index 2ae0a46..8df310a 100644
+--- a/node_modules/aedes/lib/handlers/subscribe.js
++++ b/node_modules/aedes/lib/handlers/subscribe.js
+@@ -21,6 +21,8 @@ function SubAck (packet, granted) {
+   this.messageId = packet.messageId
+   // the qos granted
+   this.granted = granted
++  // PATCH: MQTT 5.0 SUBACK properties (observIT)
++  this.properties = {}
+ }
+ 
+ function Subscription (qos, func, rh, rap, nl) {
+@@ -135,15 +137,62 @@ function addSubs (sub, done) {
+ 
+   const client = this.client
+   const broker = client.broker
+-  const topic = sub.topic
++  let topic = sub.topic
+   const qos = sub.qos
+   const rh = this.rh
+   const rap = this.rap
+   const nl = this.nl
+   let func = qos > 0 ? client.deliverQoS : client.deliver0
+ 
++  // PATCH: MQTT 5.0 Shared Subscriptions support ($share/group/topic) — observIT
++  let isShared = false
++  let sharedGroup = null
++  let sharedIndex = 0
++  const sharePrefix = '$share/'
++  if (topic.startsWith(sharePrefix)) {
++    const afterPrefix = topic.substring(sharePrefix.length)
++    const slashIdx = afterPrefix.indexOf('/')
++    if (slashIdx > 0) {
++      sharedGroup = afterPrefix.substring(0, slashIdx)
++      const actualTopic = afterPrefix.substring(slashIdx + 1)
++      topic = actualTopic
++      isShared = true
++
++      // Initialize shared subscription group
++      if (!broker._sharedSubs) {
++        broker._sharedSubs = {}
++      }
++      if (!broker._sharedSubs[sharedGroup]) {
++        broker._sharedSubs[sharedGroup] = { subscribers: [], counter: 0 }
++      }
++      const group = broker._sharedSubs[sharedGroup]
++      // Remove any existing entry for this client in this group (on re-subscribe)
++      group.subscribers = group.subscribers.filter(s => s.clientId !== client.id)
++      sharedIndex = group.subscribers.length
++      group.subscribers.push({ clientId: client.id, client: client, func: null })
++    }
++  }
++
+   const deliverFunc = func
++  const _isShared = isShared
++  const _sharedGroup = sharedGroup
++  const _sharedIndex = sharedIndex
++
+   func = function handlePacketSubscription (_packet, cb) {
++    // PATCH: Shared subscription load balancing (observIT)
++    if (_isShared && broker._sharedSubs && broker._sharedSubs[_sharedGroup]) {
++      const group = broker._sharedSubs[_sharedGroup]
++      const subscriberCount = group.subscribers.length
++      if (subscriberCount === 0) {
++        return cb()
++      }
++      const selectedIndex = group.counter % subscriberCount
++      group.counter++
++      if (selectedIndex !== _sharedIndex) {
++        return cb() // Skip — another worker handles this message
++      }
++    }
++
+     _packet = new Packet(_packet, broker)
+     _packet.nl = nl
+     if (!rap) _packet.retain = false
+@@ -156,9 +205,6 @@ function addSubs (sub, done) {
+   }
+ 
+   if (client.closed || client.broker.closed) {
+-    // a hack, sometimes client.close() or broker.close() happened
+-    // before authenticate() comes back
+-    // we don't continue subscription here
+     return
+   }
+ 
+diff --git a/node_modules/aedes/lib/write.js b/node_modules/aedes/lib/write.js
+index 716d81a..4ee835c 100644
+--- a/node_modules/aedes/lib/write.js
++++ b/node_modules/aedes/lib/write.js
+@@ -5,8 +5,13 @@ const mqtt = require('mqtt-packet')
+ function write (client, packet, done) {
+   let error = null
+   if (client.connecting || client.connected) {
++    // PATCH: Pass protocol version for MQTT 5.0 support (observIT)
++    const version = client.version || packet.protocolVersion || 4
++    if (version && !packet.protocolVersion) {
++      packet.protocolVersion = version
++    }
+     try {
+-      const result = mqtt.writeToStream(packet, client.conn)
++      const result = mqtt.writeToStream(packet, client.conn, { protocolVersion: version })
+       if (!result && !client.errored) {
+         client.conn.once('drain', done)
+         return

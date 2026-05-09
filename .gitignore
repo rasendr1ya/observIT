@@ -1,0 +1,40 @@
+# ─── Dependencies ──────────────────────────────────────
+node_modules/
+
+# ─── Environment & Secrets ─────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Build Output ──────────────────────────────────────
+dist/
+dashboard/.turbo/
+dashboard/apps/web/dist/
+
+# ─── OS Files ──────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# ─── IDE ───────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Logs ──────────────────────────────────────────────
+*.log
+npm-debug.log*
+/tmp/
+
+# ─── Security ──────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.p12
+credentials.json
+
+# ─── Coverage ──────────────────────────────────────────
+coverage/
+.nyc_output/

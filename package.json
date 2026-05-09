@@ -1,0 +1,34 @@
+{
+  "name": "observit",
+  "version": "1.0.0",
+  "description": "Smart Campus Environment Monitoring System — DTI ITS Surabaya",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "postinstall": "patch-package",
+    "broker": "node broker.js",
+    "server": "node server.js",
+    "pub:kelas": "node publishers/sensorKelas.js",
+    "pub:lab": "node publishers/sensorLab.js",
+    "pub:keamanan": "node publishers/sensorKeamanan.js",
+    "sub:alert1": "node subscribers/alertWorker1.js",
+    "sub:alert2": "node subscribers/alertWorker2.js",
+    "dashboard": "cd dashboard && npm run dev"
+  },
+  "dependencies": {
+    "aedes": "^0.51.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mqtt": "^5.15.1",
+    "socket.io": "^4.8.1",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.1"
+  },
+  "keywords": [
+    "mqtt",
+    "iot",
+    "its",
+    "smart-campus"
+  ],
+  "license": "ISC"
+}

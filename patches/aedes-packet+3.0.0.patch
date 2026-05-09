@@ -1,0 +1,19 @@
+diff --git a/node_modules/aedes-packet/packet.js b/node_modules/aedes-packet/packet.js
+index 0202d40..3a369a1 100755
+--- a/node_modules/aedes-packet/packet.js
++++ b/node_modules/aedes-packet/packet.js
+@@ -19,6 +19,14 @@ function Packet (original, broker) {
+     // client and broker. It is only relevant for QoS levels greater than 0
+     this.messageId = undefined
+   }
++  // PATCH: Forward MQTT 5.0 properties for observIT
++  if (original.properties) {
++    this.properties = original.properties
++  }
++  // PATCH: Forward MQTT 5.0 properties for observIT
++  if (original.properties) {
++    this.properties = original.properties
++  }
+ }
+ 
+ module.exports = Packet
