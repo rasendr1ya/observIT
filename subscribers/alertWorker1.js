@@ -2,15 +2,12 @@ const { createClient } = require('../common/mqttClient');
 
 const WORKER_NAME = 'AlertWorker-1';
 
-// MQTT Feature 10: Flow Control — receiveMaximum limits in-flight QoS 1/2 messages
 const client = createClient('alert-worker-1', {
   properties: {
     receiveMaximum: 5,
   },
 });
 
-// MQTT Feature 9: Shared Subscription — $share/alert-group/its/dti/#
-// MQTT Feature 2: Wildcards — multi-level # in shared subscription
 const SHARED_TOPIC = '$share/alert-group/its/dti/#';
 
 function timestamp() {
@@ -21,7 +18,6 @@ client.on('connect', () => {
   console.log(`[${WORKER_NAME}] Connected — shared subscription group: alert-group`);
   console.log(`[${WORKER_NAME}] Flow control: receiveMaximum = 5`);
 
-  // MQTT Feature 9: Shared Subscription
   client.subscribe(SHARED_TOPIC, { qos: 1 }, (err) => {
     if (err) {
       console.error(`[${WORKER_NAME}] Subscribe error:`, err.message);
@@ -36,14 +32,12 @@ client.on('message', (topic, message, packet) => {
   try {
     data = JSON.parse(message.toString());
   } catch (e) {
-    return; // skip non-JSON messages
+    return;
   }
 
   const value = data.value;
   const now = new Date().toISOString();
 
-  // Check thresholds and log alerts
-  // topic contains 'suhu' AND value > 35 → CRITICAL
   if (topic.includes('suhu') && typeof value === 'number' && value > 35) {
     const level = value > 38 ? 'critical' : 'warning';
     const alertPayload = JSON.stringify({
@@ -53,12 +47,10 @@ client.on('message', (topic, message, packet) => {
       timestamp: now,
     });
 
-    // Publish alert to alert topic
     client.publish('its/dti/alert', alertPayload, { qos: 0 });
     console.log(`[${timestamp()}] [${WORKER_NAME}] ${level === 'critical' ? '🔴 CRITICAL' : '⚠️  WARNING'}: Suhu ${value}°C (${topic})`);
   }
 
-  // topic contains 'co2' AND value > 1000 → WARNING
   if (topic.includes('co2') && typeof value === 'number' && value > 1000) {
     const level = value > 1200 ? 'critical' : 'warning';
     const alertPayload = JSON.stringify({
@@ -72,7 +64,6 @@ client.on('message', (topic, message, packet) => {
     console.log(`[${timestamp()}] [${WORKER_NAME}] ${level === 'critical' ? '🔴 CRITICAL' : '⚠️  WARNING'}: CO2 ${value} ppm (${topic})`);
   }
 
-  // topic contains 'gerak' AND motion === true → WARNING
   if (topic.includes('gerak') && value === true) {
     const alertPayload = JSON.stringify({
       level: 'warning',
@@ -85,7 +76,6 @@ client.on('message', (topic, message, packet) => {
     console.log(`[${timestamp()}] [${WORKER_NAME}] ⚠️  WARNING: Gerak terdeteksi! (${topic})`);
   }
 
-  // topic contains 'pintu' AND status === 'open' → INFO
   if (topic.includes('pintu') && value === 'open') {
     const alertPayload = JSON.stringify({
       level: 'info',

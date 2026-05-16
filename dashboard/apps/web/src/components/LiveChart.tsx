@@ -27,7 +27,7 @@ const tooltipStyle = {
 export function LiveChart({ chartData }: LiveChartProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-      {/* Chart A — Temperature */}
+      
       <Card size="sm" className="border border-[#21262d]">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider">
@@ -79,7 +79,7 @@ export function LiveChart({ chartData }: LiveChartProps) {
         </CardContent>
       </Card>
 
-      {/* Chart B — CO2 */}
+      
       <Card size="sm" className="border border-[#21262d]">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider">

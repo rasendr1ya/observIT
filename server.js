@@ -8,7 +8,6 @@ const { createClient } = require('./common/mqttClient');
 
 const EXPRESS_PORT = process.env.EXPRESS_PORT || 3000;
 
-// ─── Express + HTTP + Socket.io ───────────────────────────────────────
 const app = express();
 app.use(express.json());
 
@@ -18,12 +17,9 @@ const io = new Server(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 
-// Serve static files from dashboard build (production mode)
 const dashboardDist = path.join(__dirname, 'dashboard', 'apps', 'web', 'dist');
 app.use(express.static(dashboardDist));
 
-// ─── MQTT Feature 10: Flow Control (receiveMaximum: 10) ──────────────
-// MQTT Feature 7: LWT for dashboard monitor
 const mqttClient = createClient('dashboard-monitor', {
   properties: {
     receiveMaximum: 10,
@@ -36,45 +32,33 @@ const mqttClient = createClient('dashboard-monitor', {
   },
 });
 
-// Cache latest data to populate dashboard on connect
-const latestDataCache = new Map(); // topic → { payload, userProperties, timestamp }
-
-// Cache device statuses to re-emit on browser reconnect
-const deviceStatusCache = new Map(); // deviceName → { device, location, status, timestamp }
-
-// MQTT Feature 3: Topic Alias — local resolution map
-// sensorKelas.js uses topicAlias=1 for its/dti/kelas/suhu
-const topicAliasMap = new Map(); // aliasId (number) → topicName (string)
+const latestDataCache = new Map();
+const deviceStatusCache = new Map();
+const topicAliasMap = new Map();
 
 function timestamp() {
   return new Date().toLocaleTimeString('id-ID', { hour12: false });
 }
 
-// ─── MQTT Connect ─────────────────────────────────────────────────────
 mqttClient.on('connect', () => {
   console.log(`\n[${timestamp()}] [DashboardMonitor] Connected to broker`);
 
-  // Publish online status (LWT)
   mqttClient.publish(
     'its/dti/dashboard/status',
     JSON.stringify({ status: 'online', device: 'DashboardMonitor', timestamp: new Date().toISOString() }),
     { qos: 1, retain: true }
   );
 
-  // MQTT Feature 2: Topic Wildcards
-  // Multi-level wildcard (#) — subscribe to all DTI topics
   mqttClient.subscribe('its/dti/#', { qos: 1 }, (err) => {
     if (err) console.error('[DashboardMonitor] Subscribe error (its/dti/#):', err.message);
-    else console.log(`[${timestamp()}] [DashboardMonitor] Subscribed to its/dti/# (multi-level wildcard)`);
+    else console.log(`[${timestamp()}] [DashboardMonitor] Subscribed to its/dti/#`);
   });
 
-  // MQTT Feature 2: Single-level wildcard (+) — explicit demo
   mqttClient.subscribe('its/dti/+/status', { qos: 1 }, (err) => {
     if (err) console.error('[DashboardMonitor] Subscribe error (its/dti/+/status):', err.message);
-    else console.log(`[${timestamp()}] [DashboardMonitor] Subscribed to its/dti/+/status (single-level wildcard)`);
+    else console.log(`[${timestamp()}] [DashboardMonitor] Subscribed to its/dti/+/status`);
   });
 
-  // MQTT Feature 8: Request-Response — listen for responses
   mqttClient.subscribe('its/dti/keamanan/response/dash', { qos: 1 }, (err) => {
     if (err) console.error('[DashboardMonitor] Subscribe error (response/dash):', err.message);
     else console.log(`[${timestamp()}] [DashboardMonitor] Subscribed to its/dti/keamanan/response/dash`);
@@ -83,7 +67,6 @@ mqttClient.on('connect', () => {
   console.log(`[${timestamp()}] [DashboardMonitor] Flow control: receiveMaximum = 10\n`);
 });
 
-// ─── MQTT Message Handler ─────────────────────────────────────────────
 mqttClient.on('message', (topic, message, packet) => {
   let payload;
   try {
@@ -92,22 +75,18 @@ mqttClient.on('message', (topic, message, packet) => {
     payload = { raw: message.toString() };
   }
 
-  // MQTT Feature 3: Topic Alias — resolve alias to full topic name
   let resolvedTopic = topic;
   const alias = packet.properties?.topicAlias;
   if (alias) {
     if (topic && topic.length > 0) {
-      // First publish: register the alias
       topicAliasMap.set(alias, topic);
       console.log(`[ALIAS] Registered alias ${alias} → "${topic}"`);
     } else {
-      // Subsequent publishes: resolve from map
       resolvedTopic = topicAliasMap.get(alias) || topic;
       console.log(`[ALIAS] Resolved alias ${alias} → "${resolvedTopic}"`);
     }
   }
 
-  // MQTT Feature 4: User Properties — extract metadata from packet
   const userProperties = packet.properties?.userProperties || null;
 
   const now = Date.now();
@@ -118,15 +97,12 @@ mqttClient.on('message', (topic, message, packet) => {
     timestamp: now,
   };
 
-  // Cache latest data for new dashboard connections
   if (!resolvedTopic.includes('/status') && resolvedTopic !== 'its/dti/alert' && resolvedTopic !== 'its/dti/keamanan/response/dash') {
     latestDataCache.set(resolvedTopic, event);
   }
 
-  // ─── Emit sensor:update for all data topics ─────────────────────
   io.emit('sensor:update', event);
 
-  // ─── MQTT Feature 7: LWT — handle device status topics ──────────
   if (resolvedTopic.endsWith('/status')) {
     const deviceStatus = {
       device: payload.device || resolvedTopic.split('/').slice(-2, -1)[0],
@@ -139,12 +115,10 @@ mqttClient.on('message', (topic, message, packet) => {
     console.log(`[${timestamp()}] [DashboardMonitor] device:status → ${deviceStatus.device} is ${deviceStatus.status}`);
   }
 
-  // ─── Handle alerts from alert workers (published to its/dti/alert) ──
   if (resolvedTopic === 'its/dti/alert') {
     console.log(`[${timestamp()}] [DashboardMonitor] alert:triggered → ${payload.level}: ${payload.message}`);
   }
 
-  // ─── MQTT Feature 8: Request-Response — handle response ─────────────
   if (resolvedTopic === 'its/dti/keamanan/response/dash') {
     const correlationData = packet.properties?.correlationData;
     const correlationId = correlationData ? correlationData.toString() : null;
@@ -154,10 +128,9 @@ mqttClient.on('message', (topic, message, packet) => {
       timestamp: now,
     });
     console.log(`[${timestamp()}] [DashboardMonitor] request:response → ${correlationId}`);
-    return; // Don't double-check thresholds for response messages
+    return;
   }
 
-  // ─── Check thresholds directly (same logic as alert workers) ────────
   const value = payload.value;
   let alertEmitted = false;
 
@@ -224,8 +197,6 @@ mqttClient.on('message', (topic, message, packet) => {
   }
 });
 
-// ─── HTTP API: Request Security Status ────────────────────────────────
-// MQTT Feature 8: Request-Response Pattern
 app.post('/api/request-security', (req, res) => {
   const correlationId = uuidv4();
 
@@ -251,7 +222,6 @@ app.post('/api/request-security', (req, res) => {
   });
 });
 
-// ─── Catch-all: serve dashboard index.html ────────────────────────────
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api') && !req.path.startsWith('/socket.io')) {
     res.sendFile(path.join(dashboardDist, 'index.html'));
@@ -260,16 +230,13 @@ app.get('*', (req, res) => {
   }
 });
 
-// ─── Socket.io Connection ─────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`[${timestamp()}] [Socket.io] Client connected: ${socket.id}`);
 
-  // Send all cached sensor data to the new client
   for (const [topic, event] of latestDataCache.entries()) {
     socket.emit('sensor:update', event);
   }
 
-  // Send all cached device statuses to the new client
   for (const [device, status] of deviceStatusCache.entries()) {
     socket.emit('device:status', status);
   }
@@ -283,7 +250,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// ─── Start Server ─────────────────────────────────────────────────────
 httpServer.listen(EXPRESS_PORT, () => {
   console.log(`\n====================================`);
   console.log(`  observIT Dashboard Server`);

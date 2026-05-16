@@ -17,7 +17,6 @@ function log(event, client) {
   console.log(`[${timestamp()}] [BROKER] ${event} - ${clientId}`);
 }
 
-// --- Aedes event handlers ---
 aedes.on('client', (client) => {
   log('client connected', client);
 });
@@ -50,7 +49,6 @@ aedes.on('clientError', (client, err) => {
   log(`ERROR: ${err.message}`, client);
 });
 
-// --- TCP server (port 1883) ---
 const tcpServer = net.createServer(aedes.handle);
 tcpServer.listen(BROKER_PORT, () => {
   console.log(`\n====================================`);
@@ -59,7 +57,6 @@ tcpServer.listen(BROKER_PORT, () => {
   console.log(`====================================\n`);
 });
 
-// --- WebSocket server (port 8883) ---
 const httpServer = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('observIT MQTT WebSocket endpoint');

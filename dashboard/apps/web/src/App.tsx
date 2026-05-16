@@ -30,7 +30,7 @@ export function App() {
 
   return (
     <div className="dark min-h-svh bg-background text-foreground">
-      {/* ─── Header ────────────────────────────────────────── */}
+      
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div>
@@ -54,14 +54,14 @@ export function App() {
         </div>
       </header>
 
-      {/* ─── Main Content ──────────────────────────────────── */}
+      
       <main className="container mx-auto px-4 py-6 space-y-6 max-w-7xl">
-        {/* Row 1: Device Status Panel (full width) */}
+        
         <DeviceStatusPanel deviceStatus={deviceStatus} />
 
-        {/* Row 2: Sensor Grid (left) | Alert Log + Security Request (right) */}
+        
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-          {/* Left: 3x3 Sensor Grid */}
+          
           <div className="grid grid-cols-3 gap-3">
             {SENSOR_CARDS.map((sc) => (
               <SensorCard
@@ -75,7 +75,7 @@ export function App() {
             ))}
           </div>
 
-          {/* Right: Alerts + Request Panel */}
+          
           <div className="flex flex-col gap-6 h-full">
             <AlertLog alerts={alerts} />
             <div className="flex-1 min-h-0">
@@ -84,11 +84,11 @@ export function App() {
           </div>
         </div>
 
-        {/* Row 3: Charts — full width, sibling of Row 2 grid */}
+        
         <LiveChart chartData={chartData} />
       </main>
 
-      {/* ─── Footer ────────────────────────────────────────── */}
+      
       <footer className="border-t border-border py-3 text-center">
         <p className="text-xs text-muted-foreground">
           Institut Teknologi Sepuluh Nopember — Departemen Teknologi Informasi

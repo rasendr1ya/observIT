@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { socket } from "@/lib/socket"
 
-// ─── Type Definitions ──────────────────────────────────────────────────
 export interface SensorData {
   topic: string
   payload: { value: number | string | boolean; timestamp: string; userId?: number }
@@ -36,7 +35,6 @@ export interface ChartPoint {
   labCO2: number | null
 }
 
-// ─── Hook ──────────────────────────────────────────────────────────────
 export function useSensorData() {
   const [sensorData, setSensorData] = useState<Map<string, SensorData>>(new Map())
   const [deviceStatus, setDeviceStatus] = useState<Map<string, DeviceStatus>>(new Map())
@@ -52,7 +50,6 @@ export function useSensorData() {
     labCO2: null,
   })
 
-  // ─── Helper: add chart data point ──────────────────────────────────
   const addChartPoint = useCallback(() => {
     const now = new Date().toLocaleTimeString("id-ID", { hour12: false })
     const point: ChartPoint = {
@@ -86,7 +83,6 @@ export function useSensorData() {
         return next
       })
 
-      // Track chart values
       const value = event.payload.value
       if (typeof value === "number") {
         if (event.topic === "its/dti/kelas/suhu") {
@@ -123,7 +119,6 @@ export function useSensorData() {
     socket.on("alert:triggered", onAlertTriggered)
     socket.on("request:response", onRequestResponse)
 
-    // Add chart data point every 2 seconds
     const chartInterval = setInterval(addChartPoint, 2000)
 
     return () => {
@@ -139,7 +134,6 @@ export function useSensorData() {
     }
   }, [addChartPoint])
 
-  // ─── Request Security Status (triggers MQTT Request-Response) ──────
   const requestSecurity = useCallback(async () => {
     try {
       const res = await fetch("/api/request-security", { method: "POST" })
